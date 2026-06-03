@@ -1,8 +1,9 @@
-import type { Prisma } from "@prisma/client";
+import type { PreorderStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const GT_TIME_ZONE = "America/Guatemala";
 const OPEN_DISPATCH_STATUSES = ["SCHEDULED", "LOADED", "IN_ROUTE", "RETURN_REQUESTED", "RESCHEDULED"];
+const REAL_SALE_STATUSES: PreorderStatus[] = ["PENDING", "CONFIRMED", "DISPATCHED"];
 
 export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
@@ -58,7 +59,7 @@ export async function getDashboardData() {
       take: 8,
     }),
     prisma.preorder.findMany({
-      where: { createdAt: { gte: weekStart }, status: { not: "CANCELLED" } },
+      where: { createdAt: { gte: weekStart }, status: { in: REAL_SALE_STATUSES } },
       select: { createdAt: true, totalGTQ: true },
       orderBy: { createdAt: "asc" },
     }),
