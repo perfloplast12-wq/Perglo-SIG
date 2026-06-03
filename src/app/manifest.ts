@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Nexo Inventario",
-    short_name: "Nexo",
+    name: "Perflo-SIG",
+    short_name: "Perflo-SIG",
     description: "Inventario, preventas, produccion, logistica y rastreo operativo.",
     start_url: "/",
     scope: "/",

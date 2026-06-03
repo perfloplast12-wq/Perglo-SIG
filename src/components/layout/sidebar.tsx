@@ -40,7 +40,7 @@ export function Sidebar({ role }: { role: Role }) {
             <Image alt="Logo de Perfloplast" className="object-contain p-1.5" fill sizes="64px" src="/company-logo.svg.png" />
           </div>
           <div>
-            <p className="text-base font-semibold tracking-tight">Nexo Inventario</p>
+            <p className="text-base font-semibold tracking-tight">Perflo-SIG</p>
             <p className="text-xs text-muted">Operacion industrial</p>
           </div>
         </Link>

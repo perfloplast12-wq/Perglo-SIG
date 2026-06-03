@@ -14,12 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nexo Inventario",
+  title: "Perflo-SIG",
   description: "Sistema empresarial para inventario, preventas, produccion y despachos.",
-  applicationName: "Nexo Inventario",
+  applicationName: "Perflo-SIG",
   appleWebApp: {
     capable: true,
-    title: "Nexo Inventario",
+    title: "Perflo-SIG",
     statusBarStyle: "default",
   },
   formatDetection: {
