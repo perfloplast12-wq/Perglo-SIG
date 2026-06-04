@@ -1,10 +1,11 @@
 import type { Prisma } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { USER_MANAGER_ROLES } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { findPendingPasswordResetRequests } from "@/services/password-reset-requests";
 import type { Role } from "@/types";
 
-export async function getHeaderData(user?: { id: string; role: Role }) {
+async function getHeaderDataRaw(user?: { id: string; role: Role }) {
   const roleName = user?.role;
   const canManageUsers = roleName ? USER_MANAGER_ROLES.includes(roleName) : false;
   const canSeeInventory = roleName ? ["Super admin", "Administrador", "Contaduria", "Bodeguero"].includes(roleName) : false;
@@ -118,6 +119,15 @@ export async function getHeaderData(user?: { id: string; role: Role }) {
     ],
   };
 }
+
+export const getHeaderData = unstable_cache(
+  async (user?: { id: string; role: Role }) => getHeaderDataRaw(user),
+  ["header-data"],
+  {
+    revalidate: 10,
+    tags: ["header"],
+  },
+);
 
 function productTitle(product: { name: string; modelName: string | null; color: string | null }) {
   const model = product.modelName && product.modelName.toLowerCase() !== "general" ? product.modelName : product.name;

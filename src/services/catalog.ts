@@ -49,60 +49,86 @@ export async function fetchCatalogProducts() {
 
 export async function syncCatalogProducts() {
   const products = await fetchCatalogProducts();
-  let synced = 0;
-  let nextNumber = await getNextFinishedProductNumber();
+  const rows = products.flatMap(normalizeCatalogProduct).sort(compareCatalogRows);
+  const activeExternalIdsByProduct = new Map<string, string[]>();
 
-  for (const product of products) {
-    const rows = normalizeCatalogProduct(product);
-    const activeExternalIds = Array.from(new Set(rows.map((row) => row.catalogExternalId)));
-    const catalogProductId = rows[0]?.catalogProductId;
+  for (const row of rows) {
+    activeExternalIdsByProduct.set(row.catalogProductId, [...(activeExternalIdsByProduct.get(row.catalogProductId) || []), row.catalogExternalId]);
+  }
 
-    if (catalogProductId) {
-      await prisma.product.updateMany({
+  return prisma.$transaction(async (tx) => {
+    let synced = 0;
+
+    for (const [catalogProductId, activeExternalIds] of activeExternalIdsByProduct) {
+      await tx.product.updateMany({
         where: {
           type: "FINISHED_GOOD",
           catalogProductId,
-          catalogExternalId: { notIn: activeExternalIds },
+          catalogExternalId: { notIn: Array.from(new Set(activeExternalIds)) },
         },
         data: { isActive: false },
       });
     }
 
-    for (const row of rows) {
-      const existingByCombination = await prisma.product.findFirst({
-        where: {
-          type: "FINISHED_GOOD",
-          catalogProductId: row.catalogProductId,
-          modelName: row.modelName,
-          color: row.color,
-        },
-      });
-      const operationalSku = existingByCombination?.sku || row.sku || buildSequentialSku(nextNumber++);
-      const existing = await prisma.product.findFirst({
-        where: {
-          type: "FINISHED_GOOD",
-          OR: [
-            { catalogExternalId: row.catalogExternalId },
-            { sku: operationalSku },
-            {
-              catalogProductId: row.catalogProductId,
-              modelName: row.modelName,
-              color: row.color,
-            },
-          ],
-        },
+    const externalIds = rows.map((row) => row.catalogExternalId);
+    const catalogProductIds = Array.from(activeExternalIdsByProduct.keys());
+    const existingProducts = await tx.product.findMany({
+      where: {
+        type: "FINISHED_GOOD",
+        OR: [
+          { catalogExternalId: { in: externalIds } },
+          { catalogProductId: { in: catalogProductIds } },
+        ],
+      },
+    });
+    const matchedIds = new Set<string>();
+    const plannedRows = rows.map((row, index) => {
+      const existing = existingProducts.find((product) => {
+        if (matchedIds.has(product.id)) return false;
+        if (product.catalogExternalId === row.catalogExternalId) return true;
+        return product.catalogProductId === row.catalogProductId && product.modelName === row.modelName && product.color === row.color;
       });
 
+      if (existing) matchedIds.add(existing.id);
+      return { row, existing, sku: buildSequentialSku(index + 1) };
+    });
+    const existingIds = plannedRows.flatMap((item) => item.existing ? [item.existing.id] : []);
+    const targetSkus = plannedRows.map((item) => item.sku);
+    const conflicts = await tx.product.findMany({
+      where: {
+        type: "FINISHED_GOOD",
+        sku: { in: targetSkus },
+        ...(existingIds.length > 0 ? { id: { notIn: existingIds } } : {}),
+      },
+      select: { sku: true, name: true },
+      take: 1,
+    });
+
+    if (conflicts.length > 0) {
+      throw new Error(`No se puede ordenar el catalogo desde PT-001 porque ${conflicts[0].sku} ya existe en ${conflicts[0].name}. Cambia ese SKU y vuelve a sincronizar.`);
+    }
+
+    for (const item of plannedRows) {
+      if (item.existing && item.existing.sku !== item.sku) {
+        await tx.product.update({
+          where: { id: item.existing.id },
+          data: { sku: `SYNC-${item.existing.id.slice(-12)}` },
+        });
+      }
+    }
+
+    for (const { row, existing, sku } of plannedRows) {
       if (existing) {
-        await prisma.product.update({
+        await tx.product.update({
           where: { id: existing.id },
           data: {
-            sku: existing.sku || operationalSku,
+            sku,
             name: row.name,
             modelName: row.modelName,
             color: row.color,
             unit: "unidad",
             type: "FINISHED_GOOD",
+            catalogExternalId: row.catalogExternalId,
             catalogProductId: row.catalogProductId,
             catalogImageUrl: row.catalogImageUrl,
             description: row.description,
@@ -111,9 +137,9 @@ export async function syncCatalogProducts() {
           },
         });
       } else {
-        await prisma.product.create({
+        await tx.product.create({
           data: {
-            sku: operationalSku,
+            sku,
             name: row.name,
             modelName: row.modelName,
             color: row.color,
@@ -129,9 +155,9 @@ export async function syncCatalogProducts() {
       }
       synced += 1;
     }
-  }
 
-  return { synced };
+    return { synced };
+  });
 }
 
 async function getCatalogProductCardsRaw() {
@@ -257,20 +283,24 @@ function uniqueColors(colors: CatalogColor[]) {
   return Array.from(map.values());
 }
 
-async function getNextFinishedProductNumber() {
-  const products = await prisma.product.findMany({
-    where: { type: "FINISHED_GOOD", sku: { startsWith: "PT-" } },
-    select: { sku: true },
-  });
-
-  const max = products.reduce((current, product) => {
-    const match = product.sku.match(/^PT-(\d+)$/i);
-    return match ? Math.max(current, Number(match[1])) : current;
-  }, 0);
-
-  return max + 1;
-}
-
 function buildSequentialSku(number: number) {
   return `PT-${String(number).padStart(3, "0")}`;
+}
+
+function compareCatalogRows(a: ReturnType<typeof normalizeCatalogProduct>[number], b: ReturnType<typeof normalizeCatalogProduct>[number]) {
+  return catalogDisplayTitle(a).localeCompare(catalogDisplayTitle(b), "es")
+    || a.name.localeCompare(b.name, "es")
+    || a.modelName.localeCompare(b.modelName, "es")
+    || a.color.localeCompare(b.color, "es")
+    || a.catalogExternalId.localeCompare(b.catalogExternalId, "es");
+}
+
+function catalogDisplayTitle(row: ReturnType<typeof normalizeCatalogProduct>[number]) {
+  const model = row.modelName.trim();
+
+  if (model && model.toLowerCase() !== "general" && model.toLowerCase() !== row.name.trim().toLowerCase()) {
+    return model;
+  }
+
+  return row.name;
 }

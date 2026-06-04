@@ -384,11 +384,10 @@ function buildProductGroups(products: FinishedProduct[]) {
 
   return Array.from(grouped.values())
     .sort((a, b) => a.title.localeCompare(b.title, "es"))
-    .map((group, index) => ({ ...group, code: displayProductCode(group.sku, index) }));
+    .map((group, index) => ({ ...group, code: displayProductCode(index) }));
 }
 
-function displayProductCode(sku: string, index: number) {
-  if (/^PT-\d+/i.test(sku)) return sku.toUpperCase();
+function displayProductCode(index: number) {
   return `PT-${String(index + 1).padStart(3, "0")}`;
 }
 
