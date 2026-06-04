@@ -1,13 +1,18 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 
+ENV DATABASE_URL=mysql://placeholder:placeholder@localhost:3306/placeholder
+
 COPY package*.json ./
+COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npm ci
 
 FROM node:22-alpine AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL=mysql://placeholder:placeholder@localhost:3306/placeholder
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
