@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
-  manifest: "/manifest.webmanifest",
+  manifest: "/manifest",
 };
 
 export const viewport: Viewport = {

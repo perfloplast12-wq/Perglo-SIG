@@ -76,7 +76,7 @@ export function PwaInstallPrompt() {
         title="Instalar Aplicación"
       >
         <Download size={14} />
-        <span className="hidden sm:inline">Instalar App</span>
+        <span>Instalar App</span>
       </button>
 
       {/* iOS Safari Instructions Dialog */}
